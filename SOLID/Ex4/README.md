@@ -1,44 +1,30 @@
-# Ex4 — OCP: Hostel Fee Calculator
+# 📘 EX4 — OCP: Hostel Fee Calculator
 
-## 1. Context
-Hostel fees depend on room type and add-ons. New room types and add-ons will be introduced.
+---
 
-## 2. Current behavior
-- Uses `BookingRequest` with roomType and add-ons
-- Calculates monthly fee + one-time deposit
-- Prints a receipt and saves booking
+## 1️⃣ Problem Context
 
-## 3. What’s wrong (at least 5 issues)
-1. `HostelFeeCalculator.calculate` is a switch-case on room types.
-2. Add-ons are handled with repeated branching logic.
-3. Adding a room type requires editing the big switch (OCP violation).
-4. Money arithmetic is scattered and formatted inconsistently.
-5. Calculator also prints and persists booking data.
+We are building a **hostel fee calculator**.
 
-## 4. Your task
-Checkpoint A: Run and capture output.
-Checkpoint B: Encapsulate room pricing and add-on pricing behind abstractions.
-Checkpoint C: Remove switch-case from main calculation logic.
-Checkpoint D: Preserve output.
+### The system must:
 
-## 5. Constraints
-- Keep receipt formatting identical.
-- Keep `BookingRequest` fields unchanged.
-- No external libs.
+- 🏠 Identify room type
+- 💰 Add base room price
+- ➕ Add optional add-ons
+- 🧮 Calculate monthly fee
+- 💵 Add deposit
+- 🧾 Print receipt
 
-## 6. Acceptance criteria
-- New room type can be added without editing a switch in calculator.
-- Add-ons can be added without editing the core fee algorithm.
+### Example booking:
 
-## 7. How to run
-```bash
-cd SOLID/Ex4/src
-javac *.java
-java Main
+```
+Room: DOUBLE
+AddOns: LAUNDRY, MESS
 ```
 
-## 8. Sample output
-```text
+### Expected output:
+
+```
 === Hostel Fee Calculator ===
 Room: DOUBLE | AddOns: [LAUNDRY, MESS]
 Monthly: 16000.00
@@ -47,9 +33,224 @@ TOTAL DUE NOW: 21000.00
 Saved booking: H-7781
 ```
 
-## 9. Hints (OOP-only)
-- Prefer a list of pricing components (room + add-ons) that contribute to totals.
-- Keep printing separate from calculation.
+---
 
-## 10. Stretch goals
-- Add “late fee” rule without editing the main calculation loop.
+## 2️⃣ What Was Wrong (Design Smell)
+
+Inside the calculator we had:
+
+### Switch for room types
+
+```java
+switch(roomType) {
+  case SINGLE -> base = 14000
+  case DOUBLE -> base = 15000
+  case TRIPLE -> base = 12000
+}
+```
+
+### Conditional logic for add-ons
+
+```java
+if (addOn == MESS) add += 1000
+else if (addOn == LAUNDRY) add += 500
+else if (addOn == GYM) add += 300
+```
+
+> ⚠️ **Everything inside one method.**
+
+---
+
+## 3️⃣ Why This Is Bad
+
+Suppose hostel introduces:
+
+- **New room:** `PREMIUM`
+- **New add-on:** `WIFI`
+
+**Now we must edit the same calculator again.**
+
+Each new feature requires **modifying old code**.
+
+> ❌ **This breaks OCP.**
+
+---
+
+## 4️⃣ OCP Principle Reminder
+
+### Open/Closed Principle
+
+> **Software entities should be open for extension but closed for modification.**
+
+#### Meaning:
+
+You should **add new types** without **editing existing logic**.
+
+---
+
+## 5️⃣ Before Architecture
+
+### ❌ Switch-Based Design
+
+```
+               +-------------------------+
+               |  HostelFeeCalculator    |
+               |-------------------------|
+               | switch(roomType)        |
+               | if(addOn==MESS)         |
+               | if(addOn==LAUNDRY)      |
+               | if(addOn==GYM)          |
+               +-----------+-------------+
+                           |
+                           v
+                      BookingReceipt
+```
+
+### Problems:
+
+- ❌ New room types require editing code
+- ❌ New add-ons require editing code
+- ❌ Calculator knows too much
+
+---
+
+## 6️⃣ Refactoring Strategy
+
+We introduce **pricing components**.
+
+### Two abstraction types:
+
+**Room pricing**
+- `RoomPricing`
+
+**Add-on pricing**
+- `AddOnPricing`
+
+Each type calculates its **own price**.
+
+---
+
+## 7️⃣ After Architecture
+
+### ✅ Polymorphic Pricing System
+
+```
+                   +-----------------------+
+                   |  HostelFeeCalculator  |
+                   +-----------+-----------+
+                               |
+                               v
+                        FeeCalculator
+                               |
+          ------------------------------------------
+          |                                        |
+          v                                        v
+      RoomPricing                              AddOnPricing
+          |                                        |
+   ---------------------                -------------------------
+   |    |    |    |                     |    |    |
+ Single Double Triple Deluxe        Mess Laundry Gym
+```
+
+**The calculator now simply adds prices from components.**
+
+---
+
+## 8️⃣ How the New System Works
+
+The fee calculator does something like:
+
+```java
+monthly = room.monthlyCharge()
+
+for each addOn:
+    monthly += addOn.monthlyCharge()
+```
+
+**The calculator no longer cares what type it is.**
+
+---
+
+## 9️⃣ Why This Design Is Better
+
+### 1️⃣ Add new room easily
+
+```java
+class PremiumRoom implements RoomPricing
+```
+
+**No change to calculator.**
+
+### 2️⃣ Add new add-on easily
+
+```java
+class WifiAddOn implements AddOnPricing
+```
+
+**Calculator unchanged.**
+
+### 3️⃣ Cleaner responsibilities
+
+| Class            | Responsibility     |
+|------------------|--------------------|
+| RoomPricing      | room price         |
+| AddOnPricing     | add-on price       |
+| FeeCalculator    | sum prices         |
+
+---
+
+## 🔟 Feynman Explanation (Explain Like a Kid)
+
+### Imagine hostel billing like shopping cart pricing.
+
+**Before:**
+
+The cashier memorizes all prices:
+
+```
+If item = apple → price 10
+If item = banana → price 5
+If item = milk → price 30
+```
+
+If new item arrives → cashier must **learn new rule**.
+
+> ❌ **Messy.**
+
+---
+
+**Now we attach price tags to items.**
+
+Each item **knows its own price**.
+
+Cashier simply **scans items**.
+
+Adding new item just means creating a **new product with price tag**.
+
+> 💡 **That is OCP.**
+
+---
+
+## 1️⃣1️⃣ Key Takeaways
+
+| Before                              | After                              |
+|-------------------------------------|------------------------------------|
+| Calculator knows every room and add-on | Rooms and add-ons know their prices |
+|                                     | Calculator just sums them          |
+
+---
+
+## 1️⃣2️⃣ What We Achieved
+
+- ✔️ Removed switch-case logic
+- ✔️ Easier extension
+- ✔️ Cleaner pricing model
+- ✔️ Better modularity
+
+---
+
+## 🎤 Stage Summary
+
+> **We replaced switch-based pricing with polymorphic pricing components, enabling new room types and add-ons without modifying the calculator.**
+
+---
